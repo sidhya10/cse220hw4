@@ -535,8 +535,8 @@ int main() {
         }
         
         // Handle shot
-        if(buffer[0] == 'S') {
-                int row, col;
+       if(buffer[0] == 'S') {
+    int row, col;
     char extra;
     
     if(sscanf(buffer, "S %d %d%c", &row, &col, &extra) != 2) {
@@ -556,7 +556,7 @@ int main() {
         continue;
     }
     
-    // Fixed response format
+    // Send shot response once
     char msg[8];
     if(result == -1) { // Hit
         sprintf(msg, "R %d H", target_state->ships_remaining);
@@ -564,24 +564,24 @@ int main() {
         sprintf(msg, "R %d M", target_state->ships_remaining);
     }
     send(client_fd, msg, strlen(msg), 0);
-    
-            // Check win condition
-            if(target_state->ships_remaining == 0) {
-                // Send halt messages
-                if(current_player == 1) {
-                    send(client2_fd, "H 0", 3, 0);
-                    send(client1_fd, "H 1", 3, 0);
-                } else {
-                    send(client1_fd, "H 0", 3, 0);
-                    send(client2_fd, "H 1", 3, 0);
-                }
-                goto cleanup;
-            }
-            
-            // Switch players
-            current_player = (current_player == 1) ? 2 : 1;
-            continue;
+
+    // Check win condition - don't send shot response again
+    if(target_state->ships_remaining == 0) {
+        if(current_player == 1) {
+            // Just send halt messages
+            send(client2_fd, "H 0", 3, 0);
+            send(client1_fd, "H 1", 3, 0);
+        } else {
+            // Just send halt messages
+            send(client1_fd, "H 0", 3, 0);
+            send(client2_fd, "H 1", 3, 0);
         }
+        goto cleanup;
+    }
+    
+    current_player = (current_player == 1) ? 2 : 1;
+    continue;
+}
         
         // Invalid packet type
         send(client_fd, "E 102", 5, 0);
