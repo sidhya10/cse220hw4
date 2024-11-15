@@ -535,7 +535,7 @@ int main() {
         }
         
         // Handle shot
-       if(buffer[0] == 'S') {
+if(buffer[0] == 'S') {
     int row, col;
     char extra;
     
@@ -556,23 +556,27 @@ int main() {
         continue;
     }
     
-    // Send shot response once
+    // Fixed shot response with exact string
     char msg[8];
+    memset(msg, 0, sizeof(msg));
     if(result == -1) { // Hit
-        sprintf(msg, "R %d H", target_state->ships_remaining);
+        if(target_state->ships_remaining == 0) {
+            strcpy(msg, "R 0 H");
+        } else {
+            sprintf(msg, "R %d H", target_state->ships_remaining);
+        }
     } else { // Miss
         sprintf(msg, "R %d M", target_state->ships_remaining);
     }
+    
     send(client_fd, msg, strlen(msg), 0);
 
-    // Check win condition - don't send shot response again
+    // Check win condition - don't send additional messages until after shot response
     if(target_state->ships_remaining == 0) {
         if(current_player == 1) {
-            // Just send halt messages
             send(client2_fd, "H 0", 3, 0);
             send(client1_fd, "H 1", 3, 0);
         } else {
-            // Just send halt messages
             send(client1_fd, "H 0", 3, 0);
             send(client2_fd, "H 1", 3, 0);
         }
