@@ -110,31 +110,68 @@ void free_game_state(GameState* state) {
 
 // Validate and place a ship piece
 int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int start_col, int start_row, int ship_num) {
-    // Validate inputs
-    if(shape < 1 || shape > 7) return 300;
-    if(rotation < 1 || rotation > 4) return 301;
+    // Check shape first (300)
+    if(shape < 1 || shape > 7) {
+        return 300;
+    }
+
+    // Check rotation second (301)
+    if(rotation < 1 || rotation > 4) {
+        return 301;
+    }
+
+    // Check initial position bounds (302)
     if(start_row < 0 || start_row >= state->height || 
-       start_col < 0 || start_col >= state->width) return 302;
-    
+       start_col < 0 || start_col >= state->width) {
+        return 302;
+    }
+
     // Get movement pattern
     char* pattern = moves->rotations[shape-1][rotation-1];
     int curr_row = start_row;
     int curr_col = start_col;
-    int** temp_board = malloc(state->height * sizeof(int*));
-    for(int i = 0; i < state->height; i++) {
-        temp_board[i] = malloc(state->width * sizeof(int));
-        memcpy(temp_board[i], state->board[i], state->width * sizeof(int));
-    }
+
+    // Check all positions first for bounds
+    int test_row = start_row;
+    int test_col = start_col;
     
-    // Place first cell
-    if(temp_board[curr_row][curr_col] != 0) {
-        for(int i = 0; i < state->height; i++) free(temp_board[i]);
-        free(temp_board);
+    for(int i = 0; pattern[i] != '\0'; i++) {
+        switch(pattern[i]) {
+            case 'r': test_col++; break;
+            case 'l': test_col--; break;
+            case 'u': test_row--; break;
+            case 'd': test_row++; break;
+        }
+        
+        if(test_row < 0 || test_row >= state->height || 
+           test_col < 0 || test_col >= state->width) {
+            return 302;
+        }
+    }
+
+    // Now check for overlaps
+    test_row = start_row;
+    test_col = start_col;
+    if(state->board[test_row][test_col] != 0) {
         return 303;
     }
-    temp_board[curr_row][curr_col] = ship_num;
+
+    for(int i = 0; pattern[i] != '\0'; i++) {
+        switch(pattern[i]) {
+            case 'r': test_col++; break;
+            case 'l': test_col--; break;
+            case 'u': test_row--; break;
+            case 'd': test_row++; break;
+        }
+        
+        if(state->board[test_row][test_col] != 0) {
+            return 303;
+        }
+    }
+
+    // If we get here, placement is valid - place the ship
+    state->board[curr_row][curr_col] = ship_num;
     
-    // Follow pattern
     for(int i = 0; pattern[i] != '\0'; i++) {
         switch(pattern[i]) {
             case 'r': curr_col++; break;
@@ -142,35 +179,11 @@ int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int 
             case 'u': curr_row--; break;
             case 'd': curr_row++; break;
         }
-        
-        // Check bounds
-        if(curr_row < 0 || curr_row >= state->height || 
-           curr_col < 0 || curr_col >= state->width) {
-            for(int i = 0; i < state->height; i++) free(temp_board[i]);
-            free(temp_board);
-            return 302;
-        }
-        
-        // Check overlap
-        if(temp_board[curr_row][curr_col] != 0) {
-            for(int i = 0; i < state->height; i++) free(temp_board[i]);
-            free(temp_board);
-            return 303;
-        }
-        
-        temp_board[curr_row][curr_col] = ship_num;
+        state->board[curr_row][curr_col] = ship_num;
     }
-    
-    // If we got here, placement is valid - commit to real board
-    for(int i = 0; i < state->height; i++) {
-        memcpy(state->board[i], temp_board[i], state->width * sizeof(int));
-        free(temp_board[i]);
-    }
-    free(temp_board);
     
     return 0;
 }
-
 // Process a shot
 int process_shot(GameState* state, int row, int col) {
     if(row < 0 || row >= state->height || col < 0 || col >= state->width) {
@@ -223,6 +236,116 @@ char* create_query_response(GameState* state) {
     }
     
     return response;
+}
+
+int validate_init_packet(const char* buffer) {
+    if(strlen(buffer) < 2 || buffer[0] != 'I' || buffer[1] != ' ')
+        return 0;
+    
+    int count = 0;
+    char *str = strdup(buffer);
+    char *save_ptr = NULL;
+    char *token = strtok_r(str + 2, " ", &save_ptr);
+    
+    while(token != NULL) {
+        for(int i = 0; token[i]; i++) {
+            if(!isdigit(token[i])) {
+                free(str);
+                return 0;
+            }
+        }
+        count++;
+        token = strtok_r(NULL, " ", &save_ptr);
+    }
+    
+    free(str);
+    return count == 20;
+}
+
+int validate_init_values(int* values, int width, int height) {
+    for(int i = 0; i < 20; i += 4) {
+        // Check shape first (1-7)
+        if(values[i] < 1 || values[i] > 7) {
+            return 300;
+        }
+        
+        // Check rotation second (1-4)
+        if(values[i + 1] < 1 || values[i + 1] > 4) {
+            return 301;
+        }
+        
+        // Check position bounds
+        if(values[i + 2] < 0 || values[i + 2] >= width ||
+           values[i + 3] < 0 || values[i + 3] >= height) {
+            return 302;
+        }
+    }
+    
+    return 0;
+}
+
+int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* buffer) {
+    int values[20];
+    
+    // Check packet type
+    if(buffer[0] != 'I') {
+        send(client_fd, "E 101", 5, 0);
+        return -1;
+    }
+    
+    // Check format
+    if(!validate_init_packet(buffer)) {
+        send(client_fd, "E 201", 5, 0);
+        return -1;
+    }
+    
+    // Parse values
+    int count = 0;
+    char* token = strtok(buffer + 2, " ");
+    while(token && count < 20) {
+        values[count++] = atoi(token);
+        token = strtok(NULL, " ");
+    }
+    
+    if(count != 20) {
+        send(client_fd, "E 201", 5, 0);
+        return -1;
+    }
+    
+    // Validate shape and rotation ranges first
+    for(int i = 0; i < 20; i += 4) {
+        // Check shape (1-7)
+        if(values[i] < 1 || values[i] > 7) {
+            send(client_fd, "E 300", 5, 0);
+            return -1;
+        }
+        // Check rotation (1-4)
+        if(values[i + 1] < 1 || values[i + 1] > 4) {
+            send(client_fd, "E 301", 5, 0);
+            return -1;
+        }
+        // Check position bounds
+        if(values[i + 2] < 0 || values[i + 2] >= state->width ||
+           values[i + 3] < 0 || values[i + 3] >= state->height) {
+            send(client_fd, "E 302", 5, 0);
+            return -1;
+        }
+    }
+    
+    // Try placing ships
+    for(int i = 0; i < 20; i += 4) {
+        if(place_ship(state, moves, values[i], values[i+1], values[i+2], values[i+3], (i/4) + 1) == 303) {
+            send(client_fd, "E 303", 5, 0);
+            // Clear board
+            for(int j = 0; j < state->height; j++) {
+                memset(state->board[j], 0, state->width * sizeof(int));
+            }
+            return -1;
+        }
+    }
+    
+    send(client_fd, "A", 1, 0);
+    return 0;
 }
 
 int main() {
@@ -283,9 +406,10 @@ int main() {
         exit(EXIT_FAILURE);
     }
     
-    // Handle Begin phase
+      // Modified Begin phase for Player 1
     while(1) {
         int width, height;
+        char extra;
         memset(buffer, 0, BUFFER_SIZE);
         read(client1_fd, buffer, BUFFER_SIZE);
         
@@ -300,7 +424,8 @@ int main() {
             continue;
         }
         
-        if(sscanf(buffer, "B %d %d", &width, &height) != 2) {
+        int params = sscanf(buffer, "B %d %d%c", &width, &height, &extra);
+        if(params != 2 || buffer[1] != ' ') {
             send(client1_fd, "E 200", 5, 0);
             continue;
         }
@@ -315,8 +440,8 @@ int main() {
         send(client1_fd, "A", 1, 0);
         break;
     }
-    
-    // Handle Player 2 Begin
+
+    // Modified Begin phase for Player 2
     while(1) {
         memset(buffer, 0, BUFFER_SIZE);
         read(client2_fd, buffer, BUFFER_SIZE);
@@ -340,109 +465,43 @@ int main() {
         send(client2_fd, "A", 1, 0);
         break;
     }
-    
-    // Handle Initialize phase - Player 1
+
+    // Modified Initialize phase for Player 1
     while(1) {
         memset(buffer, 0, BUFFER_SIZE);
-        read(client1_fd, buffer, BUFFER_SIZE);
+        int bytes_read = read(client1_fd, buffer, BUFFER_SIZE - 1);
+        if(bytes_read <= 0) {
+            goto cleanup;
+        }
+        buffer[bytes_read] = '\0';
         
-        if(buffer[0] == 'F') {
+        if(strcmp(buffer, "F") == 0) {
             send(client1_fd, "H 0", 3, 0);
             send(client2_fd, "H 1", 3, 0);
             goto cleanup;
         }
         
-        if(buffer[0] != 'I') {
-            send(client1_fd, "E 101", 5, 0);
-            continue;
-        }
-        
-        int values[20];
-        int count = 0;
-        char* token = strtok(buffer + 2, " ");
-        while(token && count < 20) {
-            values[count++] = atoi(token);
-            token = strtok(NULL, " ");
-        }
-        
-        if(count != 20) {
-            send(client1_fd, "E 201", 5, 0);
-            continue;
-        }
-        
-        int error = 0;
-        for(int i = 0; i < 20; i += 4) {
-            int result = place_ship(player1_state, ship_moves, 
-                                  values[i], values[i+1], 
-                                  values[i+2], values[i+3], 
-                                  (i/4) + 1);
-            if(result != 0) {
-                error = result;
-                break;
-            }
-            }
-        
-        if(error) {
-            send(client1_fd, error == 300 ? "E 300" :
-                           error == 301 ? "E 301" :
-                           error == 302 ? "E 302" : "E 303", 5, 0);
-            continue;
-        }
-        
-        send(client1_fd, "A", 1, 0);
-        break;
+        int result = handle_initialize(client1_fd, player1_state, ship_moves, buffer);
+        if(result == 0) break;  // Successfully initialized
     }
-    
-    // Handle Initialize phase - Player 2
+
+    // Modified Initialize phase for Player 2
     while(1) {
         memset(buffer, 0, BUFFER_SIZE);
-        read(client2_fd, buffer, BUFFER_SIZE);
+        int bytes_read = read(client2_fd, buffer, BUFFER_SIZE - 1);
+        if(bytes_read <= 0) {
+            goto cleanup;
+        }
+        buffer[bytes_read] = '\0';
         
-        if(buffer[0] == 'F') {
+        if(strcmp(buffer, "F") == 0) {
             send(client2_fd, "H 0", 3, 0);
             send(client1_fd, "H 1", 3, 0);
             goto cleanup;
         }
         
-        if(buffer[0] != 'I') {
-            send(client2_fd, "E 101", 5, 0);
-            continue;
-        }
-        
-        int values[20];
-        int count = 0;
-        char* token = strtok(buffer + 2, " ");
-        while(token && count < 20) {
-            values[count++] = atoi(token);
-            token = strtok(NULL, " ");
-        }
-        
-        if(count != 20) {
-            send(client2_fd, "E 201", 5, 0);
-            continue;
-        }
-        
-        int error = 0;
-        for(int i = 0; i < 20; i += 4) {
-            int result = place_ship(player2_state, ship_moves,
-                                  values[i], values[i+1],
-                                  values[i+2], values[i+3],
-                                  (i/4) + 1);
-            if(result != 0) {
-                error = result;
-                break;
-            }
-        }
-        
-        if(error) {
-            send(client2_fd, error == 300 ? "E 300" :
-                           error == 301 ? "E 301" :
-                           error == 302 ? "E 302" : "E 303", 5, 0);
-            continue;
-        }
-        
-        send(client2_fd, "A", 1, 0);
-        break;
+        int result = handle_initialize(client2_fd, player2_state, ship_moves, buffer);
+        if(result == 0) break;  // Successfully initialized
     }
     
     // Main game loop
