@@ -544,23 +544,24 @@ int main() {
                 continue;
             }
             
-            int result = process_shot(target_state, row, col);
-            
-            if(result == 400) {
-                send(client_fd, "E 400", 5, 0);
-                continue;
-            }
-            
-            if(result == 401) {
-                send(client_fd, "E 401", 5, 0);
-                continue;
-            }
-            
-            // Send shot response
-    char hit_miss = (result == -1) ? 'H' : 'M';
-    snprintf(response, BUFFER_SIZE, "R %d %c", 
-             target_state->ships_remaining, hit_miss);
-
+                int result = process_shot(target_state, row, col);
+    
+    if(result == 400) {
+        send(client_fd, "E 400", 5, 0);
+        continue;
+    }
+    
+    if(result == 401) {
+        send(client_fd, "E 401", 5, 0);
+        continue;
+    }
+    
+    // Simplify the response formatting
+    char response[16];  // Small fixed buffer, more than enough for "R 0 H"
+    snprintf(response, sizeof(response), "R %d %c", 
+             target_state->ships_remaining,
+             (result == -1) ? 'H' : 'M');
+             
     send(client_fd, response, strlen(response), 0);
             
             // Check win condition
