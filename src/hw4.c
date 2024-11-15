@@ -108,6 +108,7 @@ void free_game_state(GameState* state) {
     free(state);
 }
 
+// Validate and place a ship piece
 int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int start_col, int start_row, int ship_num) {
     // Check shape first (300)
     if(shape < 1 || shape > 7) {
@@ -119,20 +120,21 @@ int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int 
         return 301;
     }
 
+    // Check initial position bounds (302)
+    if(start_row < 0 || start_row >= state->height || 
+       start_col < 0 || start_col >= state->width) {
+        return 302;
+    }
+
     // Get movement pattern
     char* pattern = moves->rotations[shape-1][rotation-1];
-    
-    // Check all positions for bounds first (302)
+    int curr_row = start_row;
+    int curr_col = start_col;
+
+    // Check all positions first for bounds
     int test_row = start_row;
     int test_col = start_col;
     
-    // Check initial position
-    if(test_row < 0 || test_row >= state->height || 
-       test_col < 0 || test_col >= state->width) {
-        return 302;
-    }
-    
-    // Check all positions in movement pattern
     for(int i = 0; pattern[i] != '\0'; i++) {
         switch(pattern[i]) {
             case 'r': test_col++; break;
@@ -147,13 +149,13 @@ int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int 
         }
     }
 
-    // All bounds are valid, now check overlaps (303)
+    // Now check for overlaps
     test_row = start_row;
     test_col = start_col;
     if(state->board[test_row][test_col] != 0) {
         return 303;
     }
-    
+
     for(int i = 0; pattern[i] != '\0'; i++) {
         switch(pattern[i]) {
             case 'r': test_col++; break;
@@ -161,29 +163,27 @@ int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int 
             case 'u': test_row--; break;
             case 'd': test_row++; break;
         }
+        
         if(state->board[test_row][test_col] != 0) {
             return 303;
         }
     }
 
     // If we get here, placement is valid - place the ship
-    test_row = start_row;
-    test_col = start_col;
-    state->board[test_row][test_col] = ship_num;
+    state->board[curr_row][curr_col] = ship_num;
     
     for(int i = 0; pattern[i] != '\0'; i++) {
         switch(pattern[i]) {
-            case 'r': test_col++; break;
-            case 'l': test_col--; break;
-            case 'u': test_row--; break;
-            case 'd': test_row++; break;
+            case 'r': curr_col++; break;
+            case 'l': curr_col--; break;
+            case 'u': curr_row--; break;
+            case 'd': curr_row++; break;
         }
-        state->board[test_row][test_col] = ship_num;
+        state->board[curr_row][curr_col] = ship_num;
     }
     
     return 0;
 }
-
 // Process a shot
 int process_shot(GameState* state, int row, int col) {
     if(row < 0 || row >= state->height || col < 0 || col >= state->width) {
@@ -284,7 +284,6 @@ int validate_init_values(int* values, int width, int height) {
     return 0;
 }
 
-// Modify handle_initialize to check all pieces before placing any
 int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* buffer) {
     int values[20];
     
@@ -308,20 +307,47 @@ int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* b
         token = strtok(NULL, " ");
     }
     
-    // Validate all pieces before placing any
+    if(count != 20) {
+        send(client_fd, "E 201", 5, 0);
+        return -1;
+    }
+    
+    // Check all values first, in priority order
     for(int i = 0; i < 20; i += 4) {
-        int result = place_ship(state, moves, values[i], values[i+1], values[i+2], values[i+3], (i/4) + 1);
-        if(result != 0) {
-            send(client_fd, result == 300 ? "E 300" :
-                          result == 301 ? "E 301" :
-                          result == 302 ? "E 302" : "E 303", 5, 0);
+        // Shape check first (E 300)
+        if(values[i] < 1 || values[i] > 7) {
+            send(client_fd, "E 300", 5, 0);
             return -1;
         }
     }
     
-    // Only if all validations pass, actually place the ships
     for(int i = 0; i < 20; i += 4) {
-        place_ship(state, moves, values[i], values[i+1], values[i+2], values[i+3], (i/4) + 1);
+        // Rotation check second (E 301)
+        if(values[i + 1] < 1 || values[i + 1] > 4) {
+            send(client_fd, "E 301", 5, 0);
+            return -1;
+        }
+    }
+    
+    for(int i = 0; i < 20; i += 4) {
+        // Position check last (E 302)
+        if(values[i + 2] < 0 || values[i + 2] >= state->width ||
+           values[i + 3] < 0 || values[i + 3] >= state->height) {
+            send(client_fd, "E 302", 5, 0);
+            return -1;
+        }
+    }
+    
+    // Try placing ships (only check for overlaps now)
+    for(int i = 0; i < 20; i += 4) {
+        if(place_ship(state, moves, values[i], values[i+1], values[i+2], values[i+3], (i/4) + 1) == 303) {
+            send(client_fd, "E 303", 5, 0);
+            // Clear board
+            for(int j = 0; j < state->height; j++) {
+                memset(state->board[j], 0, state->width * sizeof(int));
+            }
+            return -1;
+        }
     }
     
     send(client_fd, "A", 1, 0);
