@@ -536,15 +536,15 @@ int main() {
         
         // Handle shot
         if(buffer[0] == 'S') {
-            int row, col;
-            char extra;
-            
-            if(sscanf(buffer, "S %d %d%c", &row, &col, &extra) != 2) {
-                send(client_fd, "E 202", 5, 0);
-                continue;
-            }
-            
-                int result = process_shot(target_state, row, col);
+                int row, col;
+    char extra;
+    
+    if(sscanf(buffer, "S %d %d%c", &row, &col, &extra) != 2) {
+        send(client_fd, "E 202", 5, 0);
+        continue;
+    }
+    
+    int result = process_shot(target_state, row, col);
     
     if(result == 400) {
         send(client_fd, "E 400", 5, 0);
@@ -556,14 +556,15 @@ int main() {
         continue;
     }
     
-    // Simplify the response formatting
-    char response[16];  // Small fixed buffer, more than enough for "R 0 H"
-    snprintf(response, sizeof(response), "R %d %c", 
-             target_state->ships_remaining,
-             (result == -1) ? 'H' : 'M');
-             
-    send(client_fd, response, strlen(response), 0);
-            
+    // Fixed response format
+    char msg[8];
+    if(result == -1) { // Hit
+        sprintf(msg, "R %d H", target_state->ships_remaining);
+    } else { // Miss
+        sprintf(msg, "R %d M", target_state->ships_remaining);
+    }
+    send(client_fd, msg, strlen(msg), 0);
+    
             // Check win condition
             if(target_state->ships_remaining == 0) {
                 // Send halt messages
