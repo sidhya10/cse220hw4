@@ -557,9 +557,11 @@ int main() {
             }
             
             // Send shot response
-            sprintf(response, "R %d %c", target_state->ships_remaining,
-                    result == -1 ? 'H' : 'M');
-            send(client_fd, response, strlen(response), 0);
+    char hit_miss = (result == -1) ? 'H' : 'M';
+    snprintf(response, BUFFER_SIZE, "R %d %c", 
+             target_state->ships_remaining, hit_miss);
+
+    send(client_fd, response, strlen(response), 0);
             
             // Check win condition
             if(target_state->ships_remaining == 0) {
