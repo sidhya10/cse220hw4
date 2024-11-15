@@ -312,19 +312,25 @@ int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* b
         return -1;
     }
     
-    // Validate shape and rotation ranges first
+    // Check all values first, in priority order
     for(int i = 0; i < 20; i += 4) {
-        // Check shape (1-7)
+        // Shape check first (E 300)
         if(values[i] < 1 || values[i] > 7) {
             send(client_fd, "E 300", 5, 0);
             return -1;
         }
-        // Check rotation (1-4)
+    }
+    
+    for(int i = 0; i < 20; i += 4) {
+        // Rotation check second (E 301)
         if(values[i + 1] < 1 || values[i + 1] > 4) {
             send(client_fd, "E 301", 5, 0);
             return -1;
         }
-        // Check position bounds
+    }
+    
+    for(int i = 0; i < 20; i += 4) {
+        // Position check last (E 302)
         if(values[i + 2] < 0 || values[i + 2] >= state->width ||
            values[i + 3] < 0 || values[i + 3] >= state->height) {
             send(client_fd, "E 302", 5, 0);
@@ -332,7 +338,7 @@ int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* b
         }
     }
     
-    // Try placing ships
+    // Try placing ships (only check for overlaps now)
     for(int i = 0; i < 20; i += 4) {
         if(place_ship(state, moves, values[i], values[i+1], values[i+2], values[i+3], (i/4) + 1) == 303) {
             send(client_fd, "E 303", 5, 0);
