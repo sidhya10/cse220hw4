@@ -25,49 +25,52 @@ typedef struct {
     int ships_remaining;
 } GameState;
 
+// Initialize ship movement patterns
 ShipMoves* init_ship_moves() {
     ShipMoves* moves = malloc(sizeof(ShipMoves));
     
-    // Square (Shape 1) - all rotations same
+    // Square - all rotations same
     for(int i = 0; i < 4; i++) {
-        moves->rotations[0][i] = strdup("rd");  // right and down
+        moves->rotations[0][i] = strdup("rdl");
     }
     
-    // Line piece (Shape 2)
-    moves->rotations[1][0] = strdup("ddd");   // vertical
-    moves->rotations[1][1] = strdup("rrr");   // horizontal
-    moves->rotations[1][2] = strdup("ddd");   // vertical
-    moves->rotations[1][3] = strdup("rrr");   // horizontal
+    // Line piece
+    moves->rotations[1][0] = strdup("ddd");
+    moves->rotations[1][1] = strdup("rrr");
+    moves->rotations[1][2] = strdup("ddd");
+    moves->rotations[1][3] = strdup("rrr");
     
-    // L piece (Shape 3)
-    moves->rotations[2][0] = strdup("rur");   // Normal
-    moves->rotations[2][1] = strdup("drd");   // Right
-    moves->rotations[2][2] = strdup("rdr");   // Upside down
-    moves->rotations[2][3] = strdup("drd");   // Left
+    // L piece
+    moves->rotations[2][0] = strdup("rur");
+    moves->rotations[2][1] = strdup("drd");
+    moves->rotations[2][2] = strdup("rur");
+    moves->rotations[2][3] = strdup("drd");
     
-    // Reverse L piece (Shape 4)
-    moves->rotations[3][0] = strdup("ddr");   // Normal
-    moves->rotations[3][1] = strdup("durr");  // Right
-    moves->rotations[3][2] = strdup("rdd");   // Upside down
-    moves->rotations[3][3] = strdup("rru");   // Left
+    // Reverse L piece
+    moves->rotations[3][0] = strdup("ddr");
+    moves->rotations[3][1] = strdup("durr");
+    moves->rotations[3][2] = strdup("rdd");
+    moves->rotations[3][3] = strdup("rru");
     
-    // T piece (Shape 5)
-    moves->rotations[4][0] = strdup("rdr");   // Normal
-    moves->rotations[4][1] = strdup("duru");  // Right
-    moves->rotations[4][2] = strdup("rdr");   // Upside down
-    moves->rotations[4][3] = strdup("duru");  // Left
+    // T piece
+    moves->rotations[4][0] = strdup("rdr");
+    moves->rotations[4][1] = strdup("duru");
+    moves->rotations[4][2] = strdup("rdr");
+    moves->rotations[4][3] = strdup("duru");
     
-    // S piece (Shape 6)
-    moves->rotations[5][0] = strdup("ruu");   // Normal
-    moves->rotations[5][1] = strdup("drr");   // Right
-    moves->rotations[5][2] = strdup("ruu");   // Normal
-    moves->rotations[5][3] = strdup("drr");   // Right
+    // S piece
+    moves->rotations[5][0] = strdup("ruu");
+    moves->rotations[5][1] = strdup("drr");
+    moves->rotations[5][2] = strdup("rldd");
+    moves->rotations[5][3] = strdup("rrd");
     
-    // Z piece (Shape 7)
-    moves->rotations[6][0] = strdup("rdur");  // Normal
-    moves->rotations[6][1] = strdup("rudd");  // Right
-    moves->rotations[6][2] = strdup("rdur");  // Normal
-    moves->rotations[6][3] = strdup("rudd");  // Right
+    // Z piece
+    moves->rotations[6][0] = strdup("rdur");
+    moves->rotations[6][1] = strdup("rudd");
+    moves->rotations[6][2] = strdup("rudr");
+    moves->rotations[6][3] = strdup("drld");
+    
+    return moves;
 }
 
 // Free ship moves
