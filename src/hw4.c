@@ -128,13 +128,18 @@ int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int 
 
     // Get movement pattern
     char* pattern = moves->rotations[shape-1][rotation-1];
-    int curr_row = start_row;
-    int curr_col = start_col;
-
+    
     // Check all positions first for bounds
     int test_row = start_row;
     int test_col = start_col;
     
+    // First position check
+    if(test_row < 0 || test_row >= state->height || 
+       test_col < 0 || test_col >= state->width) {
+        return 302;
+    }
+    
+    // Check remaining positions
     for(int i = 0; pattern[i] != '\0'; i++) {
         switch(pattern[i]) {
             case 'r': test_col++; break;
@@ -149,13 +154,16 @@ int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int 
         }
     }
 
-    // Now check for overlaps
+    // Reset for overlap check
     test_row = start_row;
     test_col = start_col;
+    
+    // Check first position for overlap
     if(state->board[test_row][test_col] != 0) {
         return 303;
     }
 
+    // Check remaining positions for overlap
     for(int i = 0; pattern[i] != '\0'; i++) {
         switch(pattern[i]) {
             case 'r': test_col++; break;
@@ -170,20 +178,23 @@ int place_ship(GameState* state, ShipMoves* moves, int shape, int rotation, int 
     }
 
     // If we get here, placement is valid - place the ship
-    state->board[curr_row][curr_col] = ship_num;
+    state->board[start_row][start_col] = ship_num;
+    test_row = start_row;
+    test_col = start_col;
     
     for(int i = 0; pattern[i] != '\0'; i++) {
         switch(pattern[i]) {
-            case 'r': curr_col++; break;
-            case 'l': curr_col--; break;
-            case 'u': curr_row--; break;
-            case 'd': curr_row++; break;
+            case 'r': test_col++; break;
+            case 'l': test_col--; break;
+            case 'u': test_row--; break;
+            case 'd': test_row++; break;
         }
-        state->board[curr_row][curr_col] = ship_num;
+        state->board[test_row][test_col] = ship_num;
     }
     
     return 0;
 }
+
 // Process a shot
 int process_shot(GameState* state, int row, int col) {
     if(row < 0 || row >= state->height || col < 0 || col >= state->width) {
@@ -540,7 +551,7 @@ int main() {
             continue;
         }
         
-        // Handle shot
+       // Handle shot
 if(buffer[0] == 'S') {
     int row, col;
     char extra;
@@ -562,23 +573,23 @@ if(buffer[0] == 'S') {
         continue;
     }
     
-    // Fixed shot response with exact string
+    // Send shot response
     char msg[8];
     memset(msg, 0, sizeof(msg));
     if(result == -1) { // Hit
-        if(target_state->ships_remaining == 0) {
-            strcpy(msg, "R 0 H");
-        } else {
-            sprintf(msg, "R %d H", target_state->ships_remaining);
-        }
+        sprintf(msg, "R %d H", target_state->ships_remaining);
     } else { // Miss
         sprintf(msg, "R %d M", target_state->ships_remaining);
     }
-    
     send(client_fd, msg, strlen(msg), 0);
 
-    // Check win condition - don't send additional messages until after shot response
+    // If game is over, let next read handle the win condition
     if(target_state->ships_remaining == 0) {
+        int next_fd = (current_player == 1) ? client2_fd : client1_fd;
+        memset(buffer, 0, BUFFER_SIZE);
+        read(next_fd, buffer, BUFFER_SIZE);  // Wait for next read
+        
+        // Now send halt packets
         if(current_player == 1) {
             send(client2_fd, "H 0", 3, 0);
             send(client1_fd, "H 1", 3, 0);
