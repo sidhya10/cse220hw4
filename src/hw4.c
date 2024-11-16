@@ -29,46 +29,46 @@ typedef struct {
 ShipMoves* init_ship_moves() {
     ShipMoves* moves = malloc(sizeof(ShipMoves));
     
-    // Square - all rotations same
+    // Shape 1 (Square) - all rotations same
     for(int i = 0; i < 4; i++) {
-        moves->rotations[0][i] = strdup("rdl");
+        moves->rotations[0][i] = strdup("rd");  // Just right and down for square
     }
     
-    // Line piece
-    moves->rotations[1][0] = strdup("ddd");
-    moves->rotations[1][1] = strdup("rrr");
-    moves->rotations[1][2] = strdup("ddd");
-    moves->rotations[1][3] = strdup("rrr");
+    // Shape 2 (Line)
+    moves->rotations[1][0] = strdup("ddd");  // Vertical
+    moves->rotations[1][1] = strdup("rrr");  // Horizontal
+    moves->rotations[1][2] = strdup("ddd");  // Vertical
+    moves->rotations[1][3] = strdup("rrr");  // Horizontal
     
-    // L piece
-    moves->rotations[2][0] = strdup("rur");
-    moves->rotations[2][1] = strdup("drd");
-    moves->rotations[2][2] = strdup("rur");
-    moves->rotations[2][3] = strdup("drd");
+    // Shape 3 (L piece)
+    moves->rotations[2][0] = strdup("ddr");   // Normal L
+    moves->rotations[2][1] = strdup("rrrd");  // Rotated right
+    moves->rotations[2][2] = strdup("dlu");   // Upside down
+    moves->rotations[2][3] = strdup("lrru");  // Rotated left
     
-    // Reverse L piece
-    moves->rotations[3][0] = strdup("ddr");
-    moves->rotations[3][1] = strdup("durr");
-    moves->rotations[3][2] = strdup("rdd");
-    moves->rotations[3][3] = strdup("rru");
+    // Shape 4 (Reverse L)
+    moves->rotations[3][0] = strdup("ddl");   // Reverse L
+    moves->rotations[3][1] = strdup("rrrd");  // Rotated right
+    moves->rotations[3][2] = strdup("dru");   // Upside down
+    moves->rotations[3][3] = strdup("lrru");  // Rotated left
     
-    // T piece
-    moves->rotations[4][0] = strdup("rdr");
-    moves->rotations[4][1] = strdup("duru");
-    moves->rotations[4][2] = strdup("rdr");
-    moves->rotations[4][3] = strdup("duru");
+    // Shape 5 (T piece)
+    moves->rotations[4][0] = strdup("rrd");   // Normal T
+    moves->rotations[4][1] = strdup("drd");   // Rotated right
+    moves->rotations[4][2] = strdup("drr");   // Upside down
+    moves->rotations[4][3] = strdup("dlu");   // Rotated left
     
-    // S piece
-    moves->rotations[5][0] = strdup("ruu");
-    moves->rotations[5][1] = strdup("drr");
-    moves->rotations[5][2] = strdup("rldd");
-    moves->rotations[5][3] = strdup("rrd");
+    // Shape 6 (S piece)
+    moves->rotations[5][0] = strdup("rru");   // Normal S
+    moves->rotations[5][1] = strdup("ddr");   // Rotated
+    moves->rotations[5][2] = strdup("rru");   // Same as 0
+    moves->rotations[5][3] = strdup("ddr");   // Same as 1
     
-    // Z piece
-    moves->rotations[6][0] = strdup("rdur");
-    moves->rotations[6][1] = strdup("rudd");
-    moves->rotations[6][2] = strdup("rudr");
-    moves->rotations[6][3] = strdup("drld");
+    // Shape 7 (Z piece)
+    moves->rotations[6][0] = strdup("rrd");   // Normal Z
+    moves->rotations[6][1] = strdup("dlu");   // Rotated
+    moves->rotations[6][2] = strdup("rrd");   // Same as 0
+    moves->rotations[6][3] = strdup("dlu");   // Same as 1
     
     return moves;
 }
@@ -298,13 +298,13 @@ int validate_init_values(int* values, int width, int height) {
 int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* buffer) {
     int values[20];
     
-    // Check packet type
+    // Check packet type first
     if(buffer[0] != 'I') {
         send(client_fd, "E 101", 5, 0);
         return -1;
     }
     
-    // Check format
+    // Check format and length strictly
     if(!validate_init_packet(buffer)) {
         send(client_fd, "E 201", 5, 0);
         return -1;
@@ -314,6 +314,13 @@ int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* b
     int count = 0;
     char* token = strtok(buffer + 2, " ");
     while(token && count < 20) {
+        // Verify each token is numeric
+        for(int i = 0; token[i]; i++) {
+            if(!isdigit(token[i])) {
+                send(client_fd, "E 201", 5, 0);
+                return -1;
+            }
+        }
         values[count++] = atoi(token);
         token = strtok(NULL, " ");
     }
@@ -323,33 +330,40 @@ int handle_initialize(int client_fd, GameState* state, ShipMoves* moves, char* b
         return -1;
     }
     
-    // Check all values first, in priority order
+    // Validate ALL shapes first (300)
     for(int i = 0; i < 20; i += 4) {
-        // Shape check first (E 300)
         if(values[i] < 1 || values[i] > 7) {
             send(client_fd, "E 300", 5, 0);
             return -1;
         }
     }
     
+    // Then validate ALL rotations (301)
     for(int i = 0; i < 20; i += 4) {
-        // Rotation check second (E 301)
         if(values[i + 1] < 1 || values[i + 1] > 4) {
             send(client_fd, "E 301", 5, 0);
             return -1;
         }
     }
     
+    // Then validate ALL positions (302)
     for(int i = 0; i < 20; i += 4) {
-        // Position check last (E 302)
-        if(values[i + 2] < 0 || values[i + 2] >= state->width ||
-           values[i + 3] < 0 || values[i + 3] >= state->height) {
+        int temp_result = place_ship(state, moves, values[i], values[i+1], values[i+2], values[i+3], (i/4) + 1);
+        if(temp_result == 302) {
             send(client_fd, "E 302", 5, 0);
+            // Clear the board
+            for(int j = 0; j < state->height; j++) {
+                memset(state->board[j], 0, state->width * sizeof(int));
+            }
             return -1;
+        }
+        // Clear the board after each test
+        for(int j = 0; j < state->height; j++) {
+            memset(state->board[j], 0, state->width * sizeof(int));
         }
     }
     
-    // Try placing ships (only check for overlaps now)
+    // Finally try placing all ships and check for overlaps (303)
     for(int i = 0; i < 20; i += 4) {
         if(place_ship(state, moves, values[i], values[i+1], values[i+2], values[i+3], (i/4) + 1) == 303) {
             send(client_fd, "E 303", 5, 0);
